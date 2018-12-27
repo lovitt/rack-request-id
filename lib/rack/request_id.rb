@@ -2,6 +2,9 @@ require 'securerandom'
 
 module Rack
   class RequestId
+
+    HEADER_KEY = 'X-Request-Id'
+
     def initialize(app, opts = {})
       @app = app
       @storage = opts[:storage] || proc { Thread.current }
@@ -10,9 +13,18 @@ module Rack
 
     def call(env)
       storage = @storage.respond_to?(:call) ? @storage.call : @storage
-      storage[:request_id] = env['HTTP_X_REQUEST_ID'] || @id_generator.call
+      request = Rack::Request.new(env)
+
+      if request_id = request.get_header(HEADER_KEY)
+        storage[:request_id] = request_id
+      else
+        storage[:request_id] = @id_generator.call
+        request.set_header(HEADER_KEY, storage[:request_id])
+      end
+
       status, headers, body = @app.call(env)
-      headers['X-Request-Id'] ||= storage[:request_id]
+
+      headers[HEADER_KEY] ||= storage[:request_id]
       [status, headers, body]
     end
   end
